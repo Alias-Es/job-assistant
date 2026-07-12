@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Job Assistant",
+  "description": "Capturez et suivez vos candidatures plus facilement.",
+  "version": "0.2.0",
+  "permissions": ["activeTab"],
+  "action": {
+    "default_popup": "index.html",
+    "default_title": "Ouvrir Job Assistant"
+  }
+}
