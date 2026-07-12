@@ -1,5 +1,13 @@
 import './style.css'
-import { createPageInformation } from './page/page-information'
+
+interface PageInformationRequest {
+  type: 'GET_PAGE_INFORMATION'
+}
+
+interface PageInformationResponse {
+  title: string
+  url: string
+}
 
 function getRequiredElement<TElement extends HTMLElement>(
   selector: string,
@@ -15,31 +23,42 @@ function getRequiredElement<TElement extends HTMLElement>(
 
 const appElement = getRequiredElement<HTMLElement>('#app')
 
-function displayLoadingState(): void {
-  appElement.replaceChildren()
-
+function createPopupSection(): {
+  section: HTMLElement
+  heading: HTMLHeadingElement
+} {
   const section = document.createElement('section')
   section.className = 'popup'
 
   const heading = document.createElement('h1')
   heading.textContent = 'Job Assistant'
 
+  return {
+    section,
+    heading,
+  }
+}
+
+function displayLoadingState(): void {
+  appElement.replaceChildren()
+
+  const { section, heading } = createPopupSection()
+
   const status = document.createElement('p')
   status.className = 'status'
-  status.textContent = 'Lecture de la page en cours...'
+  status.textContent = 'Lecture du contenu de la page...'
 
   section.append(heading, status)
   appElement.append(section)
 }
 
-function displayPageInformation(title: string, url: string): void {
+function displayPageInformation(
+  title: string,
+  url: string,
+): void {
   appElement.replaceChildren()
 
-  const section = document.createElement('section')
-  section.className = 'popup'
-
-  const heading = document.createElement('h1')
-  heading.textContent = 'Job Assistant'
+  const { section, heading } = createPopupSection()
 
   const informationContainer = document.createElement('div')
   informationContainer.className = 'page-information'
@@ -74,11 +93,7 @@ function displayPageInformation(title: string, url: string): void {
 function displayError(message: string): void {
   appElement.replaceChildren()
 
-  const section = document.createElement('section')
-  section.className = 'popup'
-
-  const heading = document.createElement('h1')
-  heading.textContent = 'Job Assistant'
+  const { section, heading } = createPopupSection()
 
   const errorMessage = document.createElement('p')
   errorMessage.className = 'error'
@@ -88,7 +103,7 @@ function displayError(message: string): void {
   appElement.append(section)
 }
 
-async function loadActiveTab(): Promise<void> {
+async function loadPageInformation(): Promise<void> {
   try {
     const tabs = await chrome.tabs.query({
       active: true,
@@ -97,25 +112,32 @@ async function loadActiveTab(): Promise<void> {
 
     const activeTab = tabs[0]
 
-    if (activeTab === undefined) {
+    if (activeTab?.id === undefined) {
       displayError("Aucun onglet actif n'a été trouvé.")
       return
     }
 
-    const pageInformation = createPageInformation(activeTab)
+    const request: PageInformationRequest = {
+      type: 'GET_PAGE_INFORMATION',
+    }
 
-displayPageInformation(
-  pageInformation.title,
-  pageInformation.url,
-)
+    const response = await chrome.tabs.sendMessage<
+      PageInformationRequest,
+      PageInformationResponse
+    >(activeTab.id, request)
+
+    displayPageInformation(response.title, response.url)
   } catch (error: unknown) {
-    console.error("Impossible de lire l'onglet actif :", error)
+    console.error(
+      'Impossible de communiquer avec le content script :',
+      error,
+    )
 
     displayError(
-      'Impossible de récupérer les informations de cette page.',
+      'Impossible de lire cette page. Recharge-la puis réessaie.',
     )
   }
 }
 
 displayLoadingState()
-void loadActiveTab()
+void loadPageInformation()
