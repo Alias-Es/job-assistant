@@ -1,13 +1,9 @@
 import './style.css'
 
-interface PageInformationRequest {
-  type: 'GET_PAGE_INFORMATION'
-}
-
-interface PageInformationResponse {
-  title: string
-  url: string
-}
+import type {
+  PageInformationRequest,
+  PageInformationResponse,
+} from './shared/messages'
 
 function getRequiredElement<TElement extends HTMLElement>(
   selector: string,
@@ -15,7 +11,9 @@ function getRequiredElement<TElement extends HTMLElement>(
   const element = document.querySelector<TElement>(selector)
 
   if (element === null) {
-    throw new Error(`L'élément ${selector} est introuvable dans index.html`)
+    throw new Error(
+      `L'élément ${selector} est introuvable dans index.html`,
+    )
   }
 
   return element
@@ -39,6 +37,25 @@ function createPopupSection(): {
   }
 }
 
+function createInformationRow(
+  label: string,
+  value: string,
+): DocumentFragment {
+  const fragment = document.createDocumentFragment()
+
+  const labelElement = document.createElement('p')
+  labelElement.className = 'label'
+  labelElement.textContent = label
+
+  const valueElement = document.createElement('p')
+  valueElement.className = 'value'
+  valueElement.textContent = value
+
+  fragment.append(labelElement, valueElement)
+
+  return fragment
+}
+
 function displayLoadingState(): void {
   appElement.replaceChildren()
 
@@ -46,15 +63,14 @@ function displayLoadingState(): void {
 
   const status = document.createElement('p')
   status.className = 'status'
-  status.textContent = 'Lecture du contenu de la page...'
+  status.textContent = 'Analyse de la page en cours...'
 
   section.append(heading, status)
   appElement.append(section)
 }
 
 function displayPageInformation(
-  title: string,
-  url: string,
+  response: PageInformationResponse,
 ): void {
   appElement.replaceChildren()
 
@@ -63,27 +79,43 @@ function displayPageInformation(
   const informationContainer = document.createElement('div')
   informationContainer.className = 'page-information'
 
-  const titleLabel = document.createElement('p')
-  titleLabel.className = 'label'
-  titleLabel.textContent = 'Titre de la page'
+  informationContainer.append(
+    createInformationRow('Titre de la page', response.title),
+    createInformationRow('URL', response.url),
+  )
 
-  const titleValue = document.createElement('p')
-  titleValue.className = 'value'
-  titleValue.textContent = title
+  if (response.jobOffer === null) {
+    const status = document.createElement('p')
+    status.className = 'status'
+    status.textContent =
+      'Aucune offre JobPosting détectée sur cette page.'
 
-  const urlLabel = document.createElement('p')
-  urlLabel.className = 'label'
-  urlLabel.textContent = 'URL'
+    section.append(heading, informationContainer, status)
+    appElement.append(section)
+    return
+  }
 
-  const urlValue = document.createElement('p')
-  urlValue.className = 'value url'
-  urlValue.textContent = url
+  const offerHeading = document.createElement('h2')
+  offerHeading.textContent = 'Offre détectée'
 
   informationContainer.append(
-    titleLabel,
-    titleValue,
-    urlLabel,
-    urlValue,
+    offerHeading,
+    createInformationRow(
+      'Poste',
+      response.jobOffer.title,
+    ),
+    createInformationRow(
+      'Entreprise',
+      response.jobOffer.company ?? 'Non renseignée',
+    ),
+    createInformationRow(
+      'Localisation',
+      response.jobOffer.location ?? 'Non renseignée',
+    ),
+    createInformationRow(
+      'Type de contrat',
+      response.jobOffer.employmentType ?? 'Non renseigné',
+    ),
   )
 
   section.append(heading, informationContainer)
@@ -126,7 +158,7 @@ async function loadPageInformation(): Promise<void> {
       PageInformationResponse
     >(activeTab.id, request)
 
-    displayPageInformation(response.title, response.url)
+    displayPageInformation(response)
   } catch (error: unknown) {
     console.error(
       'Impossible de communiquer avec le content script :',

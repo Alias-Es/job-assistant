@@ -24,7 +24,12 @@ body {
   margin: 0 0 16px;
   font-size: 22px;
 }
-
+.page-information h2 {
+  margin: 20px 0 4px;
+  padding-top: 16px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 17px;
+}
 .status {
   margin: 0;
   padding: 12px;
