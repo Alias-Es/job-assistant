@@ -9,3 +9,20 @@ export interface PageInformationResponse {
   url: string
   jobOffer: ExtractedJobOffer | null
 }
+
+export interface OpenApplicationActionRequest {
+  type: 'OPEN_APPLICATION_ACTION'
+}
+
+export type OpenApplicationActionStatus =
+  | 'OPENED'
+  | 'NOT_FOUND'
+
+export interface OpenApplicationActionResponse {
+  status: OpenApplicationActionStatus
+  actionText: string | null
+}
+
+export type ExtensionRequest =
+  | PageInformationRequest
+  | OpenApplicationActionRequest

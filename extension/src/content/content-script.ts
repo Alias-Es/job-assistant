@@ -1,24 +1,13 @@
+import { findBestApplicationAction } from '../application/application-action-detector'
 import { extractJobOfferFromJsonLd } from '../job-offer/json-ld-job-extractor'
 
 import type {
-  PageInformationRequest,
+  ExtensionRequest,
+  OpenApplicationActionResponse,
   PageInformationResponse,
 } from '../shared/messages'
 
-function isPageInformationRequest(
-  message: unknown,
-): message is PageInformationRequest {
-  if (typeof message !== 'object' || message === null) {
-    return false
-  }
-
-  return (
-    'type' in message &&
-    message.type === 'GET_PAGE_INFORMATION'
-  )
-}
-
-function extractJobOfferFromPage() {
+function extractJobOfferFromPage(): PageInformationResponse['jobOffer'] {
   const jsonLdElements =
     document.querySelectorAll<HTMLScriptElement>(
       'script[type="application/ld+json"]',
@@ -31,35 +20,67 @@ function extractJobOfferFromPage() {
       continue
     }
 
-    const jobOffer = extractJobOfferFromJsonLd(
+    const offer = extractJobOfferFromJsonLd(
       jsonLdContent,
       window.location.href,
     )
 
-    if (jobOffer !== null) {
-      return jobOffer
+    if (offer !== null) {
+      return offer
     }
   }
 
   return null
 }
 
-chrome.runtime.onMessage.addListener(
-  (
-    message: unknown,
-    _sender: chrome.runtime.MessageSender,
-    sendResponse: (
-      response: PageInformationResponse,
-    ) => void,
-  ) => {
-    if (!isPageInformationRequest(message)) {
+function getPageInformation(): PageInformationResponse {
+  return {
+    title: document.title,
+    url: window.location.href,
+    jobOffer: extractJobOfferFromPage(),
+  }
+}
+
+function openApplicationAction(): OpenApplicationActionResponse {
+  const action = findBestApplicationAction(document)
+
+  if (action === null) {
+    return {
+      status: 'NOT_FOUND',
+      actionText: null,
+    }
+  }
+
+  const response: OpenApplicationActionResponse = {
+    status: 'OPENED',
+    actionText: action.text || 'Bouton de candidature',
+  }
+
+  window.setTimeout(() => {
+    if (action.url !== null) {
+      window.location.assign(action.url)
       return
     }
 
-    sendResponse({
-      title: document.title,
-      url: window.location.href,
-      jobOffer: extractJobOfferFromPage(),
-    })
+    action.element.click()
+  }, 100)
+
+  return response
+}
+
+chrome.runtime.onMessage.addListener(
+  (
+    request: ExtensionRequest,
+    _sender,
+    sendResponse,
+  ) => {
+    if (request.type === 'GET_PAGE_INFORMATION') {
+      sendResponse(getPageInformation())
+      return
+    }
+
+    if (request.type === 'OPEN_APPLICATION_ACTION') {
+      sendResponse(openApplicationAction())
+    }
   },
 )
