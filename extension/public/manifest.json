@@ -3,7 +3,7 @@
   "name": "Job Assistant",
   "description": "Capturez et suivez vos candidatures plus facilement.",
   "version": "0.3.0",
-  "permissions": ["activeTab"],
+  "permissions": ["activeTab","storage"],
   "action": {
     "default_popup": "index.html",
     "default_title": "Ouvrir Job Assistant"

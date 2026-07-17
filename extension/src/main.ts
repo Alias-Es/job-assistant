@@ -1,6 +1,14 @@
 import './style.css'
 
+import {
+  createPendingApplication,
+} from './application/pending-application'
+import {
+  savePendingApplication,
+} from './application/pending-application-storage'
 import type {
+  OpenApplicationActionRequest,
+  OpenApplicationActionResponse,
   PageInformationRequest,
   PageInformationResponse,
 } from './shared/messages'
@@ -71,6 +79,7 @@ function displayLoadingState(): void {
 
 function displayPageInformation(
   response: PageInformationResponse,
+  activeTabId: number,
 ): void {
   appElement.replaceChildren()
 
@@ -95,30 +104,86 @@ function displayPageInformation(
     return
   }
 
+  const offer = response.jobOffer
+
   const offerHeading = document.createElement('h2')
   offerHeading.textContent = 'Offre détectée'
 
   informationContainer.append(
     offerHeading,
-    createInformationRow(
-      'Poste',
-      response.jobOffer.title,
-    ),
+    createInformationRow('Poste', offer.title),
     createInformationRow(
       'Entreprise',
-      response.jobOffer.company ?? 'Non renseignée',
+      offer.company ?? 'Non renseignée',
     ),
     createInformationRow(
       'Localisation',
-      response.jobOffer.location ?? 'Non renseignée',
+      offer.location ?? 'Non renseignée',
     ),
     createInformationRow(
       'Type de contrat',
-      response.jobOffer.employmentType ?? 'Non renseigné',
+      offer.employmentType ?? 'Non renseigné',
     ),
   )
 
-  section.append(heading, informationContainer)
+  const startButton = document.createElement('button')
+  startButton.type = 'button'
+  startButton.textContent = 'Commencer la candidature'
+
+  const actionStatus = document.createElement('p')
+  actionStatus.className = 'status'
+
+  startButton.addEventListener('click', async () => {
+    startButton.disabled = true
+    startButton.textContent = 'Préparation...'
+
+    try {
+      const pendingApplication =
+        createPendingApplication(offer)
+
+      await savePendingApplication(pendingApplication)
+
+      const request: OpenApplicationActionRequest = {
+        type: 'OPEN_APPLICATION_ACTION',
+      }
+
+      const response = await chrome.tabs.sendMessage<
+        OpenApplicationActionRequest,
+        OpenApplicationActionResponse
+      >(activeTabId, request)
+
+      if (response.status === 'NOT_FOUND') {
+        startButton.disabled = false
+        startButton.textContent = 'Réessayer'
+
+        actionStatus.textContent =
+          'Offre mémorisée, mais aucun bouton Postuler fiable n’a été trouvé. Clique manuellement sur le bouton de la page.'
+        return
+      }
+
+      startButton.textContent = 'Ouverture en cours...'
+      actionStatus.textContent =
+        `Action trouvée : ${response.actionText ?? 'Postuler'}`
+    } catch (error: unknown) {
+      console.error(
+        'Impossible de démarrer la candidature :',
+        error,
+      )
+
+      startButton.disabled = false
+      startButton.textContent = 'Réessayer'
+      actionStatus.textContent =
+        "Impossible de démarrer la candidature."
+    }
+  })
+
+  section.append(
+    heading,
+    informationContainer,
+    startButton,
+    actionStatus,
+  )
+
   appElement.append(section)
 }
 
@@ -158,7 +223,7 @@ async function loadPageInformation(): Promise<void> {
       PageInformationResponse
     >(activeTab.id, request)
 
-    displayPageInformation(response)
+    displayPageInformation(response, activeTab.id)
   } catch (error: unknown) {
     console.error(
       'Impossible de communiquer avec le content script :',
