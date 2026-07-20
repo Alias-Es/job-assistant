@@ -1,14 +1,13 @@
 import './style.css'
+import {
+  abandonPendingApplication,
+  getResumeUrl,
+  replacePendingApplication,
+  startApplication,
+} from './application/application-flow'
 
-import {
-  createPendingApplication,
-} from './application/pending-application'
-import {
-  savePendingApplication,
-} from './application/pending-application-storage'
+
 import type {
-  AutofillFormRequest,
-  AutofillFormResponse,
   OpenApplicationActionRequest,
   OpenApplicationActionResponse,
   PageInformationRequest,
@@ -79,44 +78,6 @@ function displayLoadingState(): void {
   appElement.append(section)
 }
 
-function createAutofillButton(
-  activeTabId: number,
-): HTMLButtonElement {
-  const button = document.createElement('button')
-
-  button.type = 'button'
-  button.textContent = 'Tester le remplissage'
-
-  button.addEventListener('click', async () => {
-    button.disabled = true
-    button.textContent = 'Remplissage...'
-
-    try {
-      const request: AutofillFormRequest = {
-        type: 'AUTOFILL_FORM',
-      }
-
-      const response = await chrome.tabs.sendMessage<
-        AutofillFormRequest,
-        AutofillFormResponse
-      >(activeTabId, request)
-
-      button.textContent =
-        `${response.filledCount} champ(s) rempli(s)`
-    } catch (error: unknown) {
-      console.error(
-        'Impossible de remplir le formulaire :',
-        error,
-      )
-
-      button.disabled = false
-      button.textContent = 'Réessayer le remplissage'
-    }
-  })
-
-  return button
-}
-
 function displayPageInformation(
   response: PageInformationResponse,
   activeTabId: number,
@@ -139,13 +100,7 @@ function displayPageInformation(
     status.textContent =
       'Aucune offre JobPosting détectée sur cette page.'
 
-    section.append(
-      heading,
-      informationContainer,
-      status,
-      createAutofillButton(activeTabId),
-    )
-
+    section.append(heading, informationContainer, status)
     appElement.append(section)
     return
   }
@@ -184,21 +139,81 @@ function displayPageInformation(
     startButton.textContent = 'Préparation...'
 
     try {
-      const pendingApplication =
-        createPendingApplication(offer)
-
-      await savePendingApplication(pendingApplication)
+      const result =
+  await startApplication(offer)
+  if (result.alreadyRunning && !result.sameOffer) {
+    startButton.remove()
+  
+    actionStatus.textContent =
+      `Une candidature est déjà en cours : ${result.pendingApplication.offer.title}`
+  
+    const resumeButton = document.createElement('button')
+    resumeButton.type = 'button'
+    resumeButton.textContent = 'Reprendre la candidature'
+  
+    const replaceButton = document.createElement('button')
+    replaceButton.type = 'button'
+    replaceButton.textContent = 'Commencer une nouvelle'
+  
+    const abandonButton = document.createElement('button')
+    abandonButton.type = 'button'
+    abandonButton.textContent = 'Abandonner'
+  
+    resumeButton.addEventListener('click', async () => {
+      const resumeUrl = await getResumeUrl()
+  
+      if (resumeUrl === null) {
+        actionStatus.textContent =
+          'Impossible de retrouver l’URL de cette candidature.'
+        return
+      }
+  
+      await chrome.tabs.create({
+        url: resumeUrl,
+      })
+    })
+  
+    replaceButton.addEventListener('click', async () => {
+      await replacePendingApplication(offer)
+  
+      actionStatus.textContent =
+        'La nouvelle candidature remplace l’ancienne.'
+  
+      replaceButton.disabled = true
+      resumeButton.disabled = true
+      abandonButton.disabled = true
+    })
+  
+    abandonButton.addEventListener('click', async () => {
+      await abandonPendingApplication()
+  
+      resumeButton.remove()
+      replaceButton.remove()
+      abandonButton.remove()
+  
+      actionStatus.textContent =
+        'La candidature en cours a été abandonnée.'
+    })
+  
+    actionStatus.before(
+      resumeButton,
+      replaceButton,
+      abandonButton,
+    )
+  
+    return
+  }
 
       const request: OpenApplicationActionRequest = {
         type: 'OPEN_APPLICATION_ACTION',
       }
 
-      const openResponse = await chrome.tabs.sendMessage<
+      const response = await chrome.tabs.sendMessage<
         OpenApplicationActionRequest,
         OpenApplicationActionResponse
       >(activeTabId, request)
 
-      if (openResponse.status === 'NOT_FOUND') {
+      if (response.status === 'NOT_FOUND') {
         startButton.disabled = false
         startButton.textContent = 'Réessayer'
 
@@ -209,7 +224,7 @@ function displayPageInformation(
 
       startButton.textContent = 'Ouverture en cours...'
       actionStatus.textContent =
-        `Action trouvée : ${openResponse.actionText ?? 'Postuler'}`
+        `Action trouvée : ${response.actionText ?? 'Postuler'}`
     } catch (error: unknown) {
       console.error(
         'Impossible de démarrer la candidature :',
@@ -228,7 +243,6 @@ function displayPageInformation(
     informationContainer,
     startButton,
     actionStatus,
-    createAutofillButton(activeTabId),
   )
 
   appElement.append(section)
