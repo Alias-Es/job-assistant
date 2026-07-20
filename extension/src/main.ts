@@ -7,6 +7,8 @@ import {
   savePendingApplication,
 } from './application/pending-application-storage'
 import type {
+  AutofillFormRequest,
+  AutofillFormResponse,
   OpenApplicationActionRequest,
   OpenApplicationActionResponse,
   PageInformationRequest,
@@ -77,6 +79,44 @@ function displayLoadingState(): void {
   appElement.append(section)
 }
 
+function createAutofillButton(
+  activeTabId: number,
+): HTMLButtonElement {
+  const button = document.createElement('button')
+
+  button.type = 'button'
+  button.textContent = 'Tester le remplissage'
+
+  button.addEventListener('click', async () => {
+    button.disabled = true
+    button.textContent = 'Remplissage...'
+
+    try {
+      const request: AutofillFormRequest = {
+        type: 'AUTOFILL_FORM',
+      }
+
+      const response = await chrome.tabs.sendMessage<
+        AutofillFormRequest,
+        AutofillFormResponse
+      >(activeTabId, request)
+
+      button.textContent =
+        `${response.filledCount} champ(s) rempli(s)`
+    } catch (error: unknown) {
+      console.error(
+        'Impossible de remplir le formulaire :',
+        error,
+      )
+
+      button.disabled = false
+      button.textContent = 'Réessayer le remplissage'
+    }
+  })
+
+  return button
+}
+
 function displayPageInformation(
   response: PageInformationResponse,
   activeTabId: number,
@@ -99,7 +139,13 @@ function displayPageInformation(
     status.textContent =
       'Aucune offre JobPosting détectée sur cette page.'
 
-    section.append(heading, informationContainer, status)
+    section.append(
+      heading,
+      informationContainer,
+      status,
+      createAutofillButton(activeTabId),
+    )
+
     appElement.append(section)
     return
   }
@@ -147,12 +193,12 @@ function displayPageInformation(
         type: 'OPEN_APPLICATION_ACTION',
       }
 
-      const response = await chrome.tabs.sendMessage<
+      const openResponse = await chrome.tabs.sendMessage<
         OpenApplicationActionRequest,
         OpenApplicationActionResponse
       >(activeTabId, request)
 
-      if (response.status === 'NOT_FOUND') {
+      if (openResponse.status === 'NOT_FOUND') {
         startButton.disabled = false
         startButton.textContent = 'Réessayer'
 
@@ -163,7 +209,7 @@ function displayPageInformation(
 
       startButton.textContent = 'Ouverture en cours...'
       actionStatus.textContent =
-        `Action trouvée : ${response.actionText ?? 'Postuler'}`
+        `Action trouvée : ${openResponse.actionText ?? 'Postuler'}`
     } catch (error: unknown) {
       console.error(
         'Impossible de démarrer la candidature :',
@@ -182,6 +228,7 @@ function displayPageInformation(
     informationContainer,
     startButton,
     actionStatus,
+    createAutofillButton(activeTabId),
   )
 
   appElement.append(section)
