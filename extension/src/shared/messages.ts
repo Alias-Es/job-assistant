@@ -23,6 +23,15 @@ export interface OpenApplicationActionResponse {
   actionText: string | null
 }
 
+export interface AutofillFormRequest {
+  type: 'AUTOFILL_FORM'
+}
+
+export interface AutofillFormResponse {
+  filledCount: number
+}
+
 export type ExtensionRequest =
   | PageInformationRequest
   | OpenApplicationActionRequest
+  | AutofillFormRequest

@@ -15,6 +15,8 @@ export interface InspectedField {
   ariaLabel: string
 }
 
+type SearchRoot = Document | ShadowRoot
+
 function getTagName(
   field: SupportedFormField,
 ): InspectedField['tagName'] {
@@ -40,10 +42,108 @@ function getPlaceholder(field: SupportedFormField): string {
   return ''
 }
 
-function getLabel(field: SupportedFormField): string {
-  const firstLabel = field.labels?.item(0)
+function getFieldRoot(field: SupportedFormField): SearchRoot {
+  const root = field.getRootNode()
 
-  return firstLabel?.textContent?.trim() ?? ''
+  if (root instanceof ShadowRoot) {
+    return root
+  }
+
+  return field.ownerDocument
+}
+
+function getLabel(field: SupportedFormField): string {
+  const associatedLabel = field.labels?.item(0)
+  const associatedLabelText =
+    associatedLabel?.textContent?.trim() ?? ''
+
+  if (associatedLabelText.length > 0) {
+    return associatedLabelText
+  }
+
+  if (field.id.length === 0) {
+    return ''
+  }
+
+  const root = getFieldRoot(field)
+  const labels = root.querySelectorAll('label')
+
+  for (const label of labels) {
+    if (label.htmlFor === field.id) {
+      return label.textContent?.trim() ?? ''
+    }
+  }
+
+  return ''
+}
+
+function isRelevantField(field: SupportedFormField): boolean {
+  if (field.disabled) {
+    return false
+  }
+
+  if (field.getAttribute('aria-hidden') === 'true') {
+    return false
+  }
+
+  if (field instanceof HTMLInputElement) {
+    const ignoredTypes = [
+      'hidden',
+      'submit',
+      'button',
+      'reset',
+      'image',
+    ]
+
+    if (ignoredTypes.includes(field.type)) {
+      return false
+    }
+  }
+
+  return true
+}
+
+function collectSearchRoots(
+  root: SearchRoot,
+  collectedRoots: SearchRoot[],
+): void {
+  collectedRoots.push(root)
+
+  const elements = root.querySelectorAll<HTMLElement>('*')
+
+  for (const element of elements) {
+    if (element.shadowRoot !== null) {
+      collectSearchRoots(
+        element.shadowRoot,
+        collectedRoots,
+      )
+    }
+  }
+}
+
+function findAllFormFields(
+  document: Document,
+): SupportedFormField[] {
+  const roots: SearchRoot[] = []
+
+  collectSearchRoots(document, roots)
+
+  const uniqueFields = new Set<SupportedFormField>()
+
+  for (const root of roots) {
+    const fields =
+      root.querySelectorAll<SupportedFormField>(
+        'input, textarea, select',
+      )
+
+    for (const field of fields) {
+      if (isRelevantField(field)) {
+        uniqueFields.add(field)
+      }
+    }
+  }
+
+  return Array.from(uniqueFields)
 }
 
 export function inspectField(
@@ -57,17 +157,15 @@ export function inspectField(
     name: field.name,
     id: field.id,
     placeholder: getPlaceholder(field),
-    autocomplete: field.getAttribute('autocomplete') ?? '',
-    ariaLabel: field.getAttribute('aria-label') ?? '',
+    autocomplete:
+      field.getAttribute('autocomplete') ?? '',
+    ariaLabel:
+      field.getAttribute('aria-label') ?? '',
   }
 }
 
 export function inspectFormFields(
   document: Document,
 ): InspectedField[] {
-  const fields = document.querySelectorAll<SupportedFormField>(
-    'form input, form textarea, form select',
-  )
-
-  return Array.from(fields).map(inspectField)
+  return findAllFormFields(document).map(inspectField)
 }

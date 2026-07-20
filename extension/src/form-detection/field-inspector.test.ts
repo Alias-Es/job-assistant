@@ -132,25 +132,30 @@ describe('inspectField', () => {
 })
 
 describe('inspectFormFields', () => {
-  it('retourne seulement les champs présents dans un formulaire', () => {
-    const document = createDocument(`
-      <input id="outside-form" type="text" />
-
-      <form>
-        <input id="first-name" name="first_name" type="text" />
-        <textarea id="message" name="message"></textarea>
-        <select id="country" name="country"></select>
-      </form>
-    `)
-
-    const result = inspectFormFields(document)
-
-    expect(result).toHaveLength(3)
-
-    expect(result.map((field) => field.id)).toEqual([
-      'first-name',
-      'message',
-      'country',
-    ])
-  })
+    it('retourne les champs présents dans la page', () => {
+        const document = createDocument(`
+          <main>
+            <input id="outside-form" type="text" />
+      
+            <form>
+              <input id="first-name" type="text" />
+              <textarea id="motivation"></textarea>
+              <select id="contract-type">
+                <option>CDI</option>
+              </select>
+            </form>
+          </main>
+        `)
+      
+        const result = inspectFormFields(document)
+      
+        expect(result).toHaveLength(4)
+      
+        expect(result.map((field) => field.id)).toEqual([
+          'outside-form',
+          'first-name',
+          'motivation',
+          'contract-type',
+        ])
+      })
 })
