@@ -3,7 +3,9 @@ import { autofillForm } from '../form-autofill/form-autofill'
 import { extractJobOfferFromJsonLd } from '../job-offer/json-ld-job-extractor'
 import { inspectFormFields } from '../form-detection/field-inspector'
 import { mapField } from '../form-detection/field-mapper'
-import type { PendingApplication } from '../application/pending-application'
+import { createSubmittedApplication } from '../application/submitted-application'
+import { saveSubmittedApplication } from '../application/submitted-application-storage'
+
 import type { CandidateProfile } from '../profile/candidate-profile'
 import type {
   AutofillFormResponse,
@@ -11,8 +13,13 @@ import type {
   OpenApplicationActionResponse,
   PageInformationResponse,
 } from '../shared/messages'
+import { detectApplicationSubmission } from '../application/application-submission-detector'
+import {
+  clearPendingApplication,
+  getPendingApplication,
+} from '../application/pending-application-storage'
 
-const PENDING_APPLICATION_STORAGE_KEY = 'pendingApplication'
+
 
 /*
  * Profil temporaire pour nos tests.
@@ -95,20 +102,7 @@ function autofillCurrentForm(): AutofillFormResponse {
   return autofillForm(document, TEST_PROFILE)
 }
 
-async function getPendingApplication(): Promise<
-  PendingApplication | null
-> {
-  const storedData = await chrome.storage.local.get(
-    PENDING_APPLICATION_STORAGE_KEY,
-  )
 
-  const application =
-    storedData[PENDING_APPLICATION_STORAGE_KEY] as
-      | PendingApplication
-      | undefined
-
-  return application ?? null
-}
 
 
 
@@ -160,6 +154,107 @@ function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => {
     window.setTimeout(resolve, milliseconds)
   })
+}
+async function detectSubmittedApplication(): Promise<boolean> {
+  const pendingApplication =
+    await getPendingApplication()
+
+  if (pendingApplication === null) {
+    return false
+  }
+
+  const submissionResult =
+    detectApplicationSubmission(document)
+
+  if (!submissionResult.detected) {
+    return false
+  }
+
+  const submittedApplication =
+    createSubmittedApplication(pendingApplication)
+
+  await saveSubmittedApplication(submittedApplication)
+  await clearPendingApplication()
+
+  console.log(
+    '[Job Assistant] Candidature envoyée détectée :',
+    submissionResult.matchedText,
+  )
+
+  return true
+}
+async function initializeSubmissionDetection(): Promise<void> {
+  const pendingApplication =
+    await getPendingApplication()
+
+  // On ne surveille rien sans candidature active.
+  if (pendingApplication === null) {
+    return
+  }
+
+  let checkTimer: number | null = null
+  let detectionFinished = false
+
+  async function checkPage(): Promise<void> {
+    if (detectionFinished) {
+      return
+    }
+
+    const detected =
+      await detectSubmittedApplication()
+
+    if (detected) {
+      detectionFinished = true
+      observer.disconnect()
+
+      if (checkTimer !== null) {
+        window.clearTimeout(checkTimer)
+      }
+    }
+  }
+
+  const observer = new MutationObserver(() => {
+    if (detectionFinished) {
+      return
+    }
+
+    /*
+     * Une page dynamique peut faire plusieurs changements
+     * successifs. On attend un peu avant de l’analyser.
+     */
+    if (checkTimer !== null) {
+      window.clearTimeout(checkTimer)
+    }
+
+    checkTimer = window.setTimeout(() => {
+      void checkPage()
+    }, 300)
+  })
+
+  /*
+   * Premier contrôle immédiat si la confirmation
+   * est déjà visible au chargement.
+   */
+  await checkPage()
+
+  if (detectionFinished) {
+    return
+  }
+
+  observer.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  })
+
+  /*
+   * On arrête automatiquement en quittant la page.
+   */
+  window.addEventListener(
+    'pagehide',
+    () => observer.disconnect(),
+    { once: true },
+  )
 }
 
 async function initializeAutomaticAutofill(): Promise<void> {
@@ -247,4 +342,10 @@ chrome.runtime.onMessage.addListener(
 /*
  * Cette ligne s’exécute automatiquement à chaque nouvelle page.
  */
+/*
+ * À chaque nouvelle page :
+ * 1. on vérifie si une confirmation d’envoi est affichée ;
+ * 2. puis on tente le remplissage automatique.
+ */
+void initializeSubmissionDetection()
 void initializeAutomaticAutofill()

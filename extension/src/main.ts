@@ -6,6 +6,10 @@ import {
   startApplication,
 } from './application/application-flow'
 
+import {
+  clearSubmittedApplication,
+  getSubmittedApplication,
+} from './application/submitted-application-storage'
 
 import type {
   OpenApplicationActionRequest,
@@ -63,6 +67,55 @@ function createInformationRow(
   fragment.append(labelElement, valueElement)
 
   return fragment
+}
+async function displaySubmittedApplication(): Promise<boolean> {
+  const submittedApplication =
+    await getSubmittedApplication()
+
+  if (submittedApplication === null) {
+    return false
+  }
+
+  appElement.replaceChildren()
+
+  const { section, heading } = createPopupSection()
+
+  const successHeading = document.createElement('h2')
+  successHeading.textContent = '✅ Candidature envoyée'
+
+  const informationContainer = document.createElement('div')
+  informationContainer.className = 'page-information'
+
+  informationContainer.append(
+    createInformationRow(
+      'Poste',
+      submittedApplication.title,
+    ),
+    createInformationRow(
+      'Entreprise',
+      submittedApplication.company ?? 'Non renseignée',
+    ),
+  )
+
+  const confirmButton = document.createElement('button')
+  confirmButton.type = 'button'
+  confirmButton.textContent = 'Fermer'
+
+  confirmButton.addEventListener('click', async () => {
+    await clearSubmittedApplication()
+    void loadPageInformation()
+  })
+
+  section.append(
+    heading,
+    successHeading,
+    informationContainer,
+    confirmButton,
+  )
+
+  appElement.append(section)
+
+  return true
 }
 
 function displayLoadingState(): void {
@@ -296,6 +349,17 @@ async function loadPageInformation(): Promise<void> {
     )
   }
 }
+async function initializePopup(): Promise<void> {
+  displayLoadingState()
 
-displayLoadingState()
-void loadPageInformation()
+  const submittedApplicationDisplayed =
+    await displaySubmittedApplication()
+
+  if (submittedApplicationDisplayed) {
+    return
+  }
+
+  await loadPageInformation()
+}
+
+void initializePopup()
