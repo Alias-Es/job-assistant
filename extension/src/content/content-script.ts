@@ -63,6 +63,7 @@ function extractJobOfferFromPage(): PageInformationResponse['jobOffer'] {
   return null
 }
 
+
 function getPageInformation(): PageInformationResponse {
   return {
     title: document.title,
@@ -155,6 +156,9 @@ function wait(milliseconds: number): Promise<void> {
     window.setTimeout(resolve, milliseconds)
   })
 }
+interface CreateSubmittedApplicationResponse {
+  success: boolean
+}
 async function detectSubmittedApplication(): Promise<boolean> {
   const pendingApplication =
     await getPendingApplication()
@@ -173,8 +177,55 @@ async function detectSubmittedApplication(): Promise<boolean> {
   const submittedApplication =
     createSubmittedApplication(pendingApplication)
 
+  /*
+   * On conserve d'abord la candidature localement.
+   * Ainsi, elle n'est pas perdue si le backend est arrêté.
+   */
   await saveSubmittedApplication(submittedApplication)
   await clearPendingApplication()
+
+  /*
+   * L'entreprise peut parfois ne pas être extraite.
+   * On n'invente pas de valeur dans ce cas.
+   */
+  if (pendingApplication.offer.company === null) {
+    console.warn(
+      '[Job Assistant] Candidature conservée localement : entreprise absente.',
+    )
+
+    return true
+  }
+
+  try {
+    const backendResponse = (
+      await chrome.runtime.sendMessage({
+        type: 'CREATE_SUBMITTED_APPLICATION',
+        payload: {
+          title: pendingApplication.offer.title,
+          company: pendingApplication.offer.company,
+          offerUrl: pendingApplication.offer.url,
+          appliedAt: new Date(
+            submittedApplication.submittedAt,
+          ).toISOString(),
+        },
+      })
+    ) as CreateSubmittedApplicationResponse
+
+    if (backendResponse.success) {
+      console.log(
+        '[Job Assistant] Candidature enregistrée dans le backend.',
+      )
+    } else {
+      console.warn(
+        '[Job Assistant] Le backend n’a pas enregistré la candidature.',
+      )
+    }
+  } catch (error: unknown) {
+    console.error(
+      '[Job Assistant] Impossible de contacter le backend :',
+      error,
+    )
+  }
 
   console.log(
     '[Job Assistant] Candidature envoyée détectée :',

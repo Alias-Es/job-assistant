@@ -3,15 +3,30 @@
   "name": "Job Assistant",
   "description": "Capturez et suivez vos candidatures plus facilement.",
   "version": "0.3.0",
-  "permissions": ["activeTab","storage"],
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://localhost:8080/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js",
+    "type": "module"
+  },
   "action": {
     "default_popup": "index.html",
     "default_title": "Ouvrir Job Assistant"
   },
   "content_scripts": [
     {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["content-script.js"],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "content-script.js"
+      ],
       "run_at": "document_idle"
     }
   ]
