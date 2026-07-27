@@ -1,0 +1,10 @@
+CREATE TABLE job_applications (
+    id UUID PRIMARY KEY,
+    title VARCHAR(150) NOT NULL,
+    company VARCHAR(150) NOT NULL,
+    offer_url TEXT NOT NULL,
+    status VARCHAR(30) NOT NULL,
+    applied_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+);
